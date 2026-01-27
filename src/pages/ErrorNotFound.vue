@@ -8,7 +8,7 @@
       <q-btn
         class="q-mt-xl"
         color="white"
-        text-color="blue"
+        text-color="yellow"
         unelevated
         to="/"
         label="Go Home"

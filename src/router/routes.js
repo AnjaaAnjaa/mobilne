@@ -2,11 +2,20 @@ const routes = [
   {
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
-    children: [{ path: '', component: () => import('pages/IndexPage.vue') }],
+    children: [
+      { path: '', component: () => import('pages/HomePage.vue') },
+
+      { path: 'login', component: () => import('pages/LoginPage.vue') },
+      { path: 'register', component: () => import('pages/RegisterPage.vue') },
+
+      { path: 'pets', component: () => import('pages/PetsPage.vue') },
+      { path: 'pets/:id', component: () => import('pages/PetDetailsPage.vue') },
+
+      { path: 'upcoming', component: () => import('pages/UpcomingPage.vue') },
+    ],
   },
 
-  // Always leave this as last one,
-  // but you can also remove it
+  // uvijek zadnje:
   {
     path: '/:catchAll(.*)*',
     component: () => import('pages/ErrorNotFound.vue'),

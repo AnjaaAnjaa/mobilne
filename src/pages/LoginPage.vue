@@ -1,41 +1,95 @@
 <template>
-  <q-page class="column flex-center q-pa-xl">
-    <q-card style="width: 420px; max-width: 90vw" class="q-pa-lg">
-      <div class="text-h5 text-weight-bold q-mb-md text-center">Prijava</div>
+  <q-page class="auth-page">
+    <div class="auth-wrap">
+      <q-card class="auth-card">
+        <q-card-section class="q-pb-sm">
+          <div class="text-h5 text-weight-bold">Prijava</div>
+          <div class="text-caption text-grey-7 q-mt-xs">
+            Prijavi se za pristup svojim ljubimcima i pregledima.
+          </div>
+        </q-card-section>
 
-      <q-form class="q-gutter-md" @submit.prevent="login">
-        <q-input v-model="email" label="Email" type="email" autocomplete="email" />
-        <q-input
-          v-model="password"
-          label="Lozinka"
-          type="password"
-          autocomplete="current-password"
-        />
+        <q-separator />
 
-        <q-btn
-          label="Prijavi se"
-          color="yellow-7"
-          text-color="black"
-          class="full-width"
-          type="submit"
-          :loading="loading"
-        />
+        <q-card-section class="q-pt-md">
+          <q-form class="q-gutter-md" @submit.prevent="login">
+            <q-input
+              v-model="email"
+              label="Email"
+              type="email"
+              autocomplete="email"
+              inputmode="email"
+              standout
+              rounded
+              dense
+              :disable="loading"
+            >
+              <template #prepend>
+                <q-icon name="mail" />
+              </template>
+            </q-input>
 
-        <q-btn flat label="Nemam račun — Registracija" class="full-width" to="/register" />
-      </q-form>
+            <q-input
+              v-model="password"
+              :type="showPwd ? 'text' : 'password'"
+              label="Lozinka"
+              autocomplete="current-password"
+              standout
+              rounded
+              dense
+              :disable="loading"
+            >
+              <template #prepend>
+                <q-icon name="lock" />
+              </template>
+              <template #append>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  :icon="showPwd ? 'visibility_off' : 'visibility'"
+                  @click="showPwd = !showPwd"
+                  :aria-label="showPwd ? 'Sakrij lozinku' : 'Prikaži lozinku'"
+                />
+              </template>
+            </q-input>
 
-      <!-- Debug panel (da vidiš odmah što se dogodilo) -->
-      <q-separator class="q-my-md" />
-      <div class="text-caption text-grey-7">
-        API baseURL: <b>{{ baseURL }}</b>
-      </div>
-      <div class="text-caption q-mt-sm">
-        Zadnji rezultat:
-        <pre style="white-space: pre-wrap; word-break: break-word; margin: 8px 0 0"
-          >{{ debugText }}
-        </pre>
-      </div>
-    </q-card>
+            <q-btn
+              unelevated
+              class="auth-btn"
+              label="Prijavi se"
+              color="yellow-7"
+              text-color="black"
+              type="submit"
+              :loading="loading"
+              :disable="!email || !password"
+              no-caps
+              rounded
+            />
+
+            <q-btn
+              flat
+              class="full-width"
+              label="Nemam račun — Registracija"
+              to="/register"
+              no-caps
+            />
+          </q-form>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-banner v-if="debugText" dense class="bg-grey-2 text-grey-9 rounded-borders">
+            <div class="text-caption">
+              <div class="text-weight-medium">Debug</div>
+              <div class="q-mt-xs">
+                API: <b>{{ baseURL }}</b>
+              </div>
+              <pre class="auth-pre">{{ debugText }}</pre>
+            </div>
+          </q-banner>
+        </q-card-section>
+      </q-card>
+    </div>
   </q-page>
 </template>
 
@@ -47,6 +101,7 @@ import { api } from 'boot/axios'
 
 const email = ref('')
 const password = ref('')
+const showPwd = ref(false)
 const loading = ref(false)
 
 const router = useRouter()
@@ -60,11 +115,9 @@ function formatErr(err) {
     message: err?.message,
     code: err?.code,
     status: err?.response?.status,
-    statusText: err?.response?.statusText,
     data: err?.response?.data,
     url: err?.config?.baseURL ? `${err.config.baseURL}${err.config.url}` : err?.config?.url,
     method: err?.config?.method,
-    timeout: err?.config?.timeout,
   }
 }
 
@@ -73,48 +126,52 @@ async function login() {
   debugText.value = 'Šaljem /auth/login ...'
 
   try {
-    // mini "ping" prije logina (da znamo je li API živ i reachable)
-    // Ako nemate /ping endpoint, ovo će samo failati i pokazati nam error.
-    try {
-      const pingRes = await api.get('/ping')
-      console.log('PING OK', pingRes.status, pingRes.data)
-    } catch (pingErr) {
-      console.log('PING ERR', formatErr(pingErr))
-    }
-
-    const payload = { email: email.value, password: password.value }
-    console.log('LOGIN payload', payload)
-
+    const payload = { email: email.value.trim(), password: password.value }
     const res = await api.post('/auth/login', payload)
 
-    console.log('LOGIN OK', res.status, res.data)
-    debugText.value = `LOGIN OK\nstatus: ${res.status}\nresponse:\n${JSON.stringify(res.data, null, 2)}`
-
-    // token + user
-    if (!res?.data?.token) {
-      $q.notify({
-        type: 'warning',
-        message: 'Login je vratio response, ali nema tokena (provjeri backend response shape).',
-      })
-    }
-
-    localStorage.setItem('token', res.data.token || '')
-    localStorage.setItem('user', JSON.stringify(res.data.user || null))
+    localStorage.setItem('token', res.data?.token || '')
+    localStorage.setItem('user', JSON.stringify(res.data?.user || null))
 
     $q.notify({ type: 'positive', message: 'Uspješna prijava' })
-    router.push('/pets')
+    await router.push('/pets')
   } catch (err) {
     const info = formatErr(err)
-    console.error('LOGIN ERR', info)
-
-    debugText.value = `LOGIN ERROR\n${JSON.stringify(info, null, 2)}`
+    debugText.value = JSON.stringify(info, null, 2)
 
     $q.notify({
       type: 'negative',
-      message: info?.data?.message || `Greška pri prijavi (status: ${info.status ?? 'n/a'})`,
+      message: info?.data?.message || `Greška pri prijavi`,
     })
   } finally {
     loading.value = false
   }
 }
 </script>
+
+<style scoped>
+.auth-page {
+  min-height: 100%;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-wrap {
+  width: 100%;
+  max-width: 420px;
+}
+.auth-card {
+  border-radius: 18px;
+}
+.auth-btn {
+  width: 100%;
+  height: 46px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.auth-pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+</style>

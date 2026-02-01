@@ -12,13 +12,22 @@
   ],
   "author": "Apache Cordova Team",
   "license": "Apache-2.0",
-  "devDependencies": {
-    "cordova-android": "^14.0.1"
-  },
   "cordova": {
     "platforms": [
       "android"
     ],
-    "plugins": {}
+    "plugins": {
+      "cordova-plugin-camera": {
+        "ANDROIDX_CORE_VERSION": "1.6.+"
+      },
+      "cordova-plugin-calendar": {},
+      "cordova-plugin-inappbrowser": {}
+    }
+  },
+  "devDependencies": {
+    "cordova-android": "^14.0.1",
+    "cordova-plugin-calendar": "^5.1.6",
+    "cordova-plugin-camera": "^8.0.0",
+    "cordova-plugin-inappbrowser": "^6.0.0"
   }
 }

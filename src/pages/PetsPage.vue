@@ -56,6 +56,29 @@
       <q-card style="min-width: 400px">
         <q-card-section class="text-h6">Dodaj ljubimca</q-card-section>
         <q-card-section class="q-gutter-md">
+          <!-- PHOTO (kamera ili upload) -->
+          <div class="q-mb-sm">
+            <div class="text-subtitle2 q-mb-xs">Fotka ljubimca</div>
+            <div class="row items-center q-gutter-sm">
+              <q-btn outline icon="photo_camera" label="Slikaj" @click="capturePhoto('add')" />
+              <q-file
+                v-model="addPhotoFile"
+                filled
+                clearable
+                accept="image/*"
+                label="Upload"
+                @update:model-value="onFilePicked('add')"
+              />
+            </div>
+            <q-img
+              v-if="addForm.photo_preview"
+              :src="addForm.photo_preview"
+              style="max-height: 180px"
+              class="q-mt-sm rounded-borders"
+              fit="contain"
+            />
+          </div>
+
           <q-input v-model="addForm.name" label="Ime *" filled />
           <q-input v-model="addForm.species" label="Vrsta" filled />
           <q-input v-model="addForm.breed" label="Pasmina" filled />
@@ -79,6 +102,29 @@
       <q-card style="min-width: 400px">
         <q-card-section class="text-h6">Uredi ljubimca</q-card-section>
         <q-card-section class="q-gutter-md">
+          <!-- PHOTO (kamera ili upload) -->
+          <div class="q-mb-sm">
+            <div class="text-subtitle2 q-mb-xs">Fotka ljubimca</div>
+            <div class="row items-center q-gutter-sm">
+              <q-btn outline icon="photo_camera" label="Slikaj" @click="capturePhoto('edit')" />
+              <q-file
+                v-model="editPhotoFile"
+                filled
+                clearable
+                accept="image/*"
+                label="Upload"
+                @update:model-value="onFilePicked('edit')"
+              />
+            </div>
+            <q-img
+              v-if="editForm.photo_preview"
+              :src="editForm.photo_preview"
+              style="max-height: 180px"
+              class="q-mt-sm rounded-borders"
+              fit="contain"
+            />
+          </div>
+
           <q-input v-model="editForm.name" label="Ime *" filled />
           <q-input v-model="editForm.species" label="Vrsta" filled />
           <q-input v-model="editForm.breed" label="Pasmina" filled />
@@ -149,11 +195,98 @@ function openPet(p) {
 /* ADD */
 const addDialog = ref(false)
 const addLoading = ref(false)
-const addForm = ref({ name: '', species: '', breed: '', notes: '' })
+const addPhotoFile = ref(null)
+const addForm = ref({
+  name: '',
+  species: '',
+  breed: '',
+  notes: '',
+  photo_base64: null,
+  photo_mime: null,
+  photo_preview: null,
+})
 
 function openAddDialog() {
-  addForm.value = { name: '', species: '', breed: '', notes: '' }
+  addPhotoFile.value = null
+  addForm.value = {
+    name: '',
+    species: '',
+    breed: '',
+    notes: '',
+    photo_base64: null,
+    photo_mime: null,
+    photo_preview: null,
+  }
   addDialog.value = true
+}
+
+/* PHOTO HELPERS (Cordova kamera + browser upload) */
+const editPhotoFile = ref(null)
+
+function hasCordovaCamera() {
+  return typeof window !== 'undefined' && !!window?.navigator?.camera
+}
+
+function capturePhoto(mode) {
+  if (!hasCordovaCamera()) {
+    $q.notify({ type: 'warning', message: 'Kamera nije dostupna (radi samo na mobitelu).' })
+    return
+  }
+
+  const options = {
+    quality: 70,
+    destinationType: window.navigator.camera.DestinationType.DATA_URL,
+    encodingType: window.navigator.camera.EncodingType.JPEG,
+    mediaType: window.navigator.camera.MediaType.PICTURE,
+    correctOrientation: true,
+    targetWidth: 900,
+    targetHeight: 900,
+  }
+
+  window.navigator.camera.getPicture(
+    (data) => {
+      const mime = 'image/jpeg'
+      const preview = `data:${mime};base64,${data}`
+      if (mode === 'add') {
+        addForm.value.photo_base64 = data
+        addForm.value.photo_mime = mime
+        addForm.value.photo_preview = preview
+      } else {
+        editForm.value.photo_base64 = data
+        editForm.value.photo_mime = mime
+        editForm.value.photo_preview = preview
+      }
+    },
+    (err) => {
+      if (String(err).toLowerCase().includes('cancel')) return
+      console.error('Camera error:', err)
+      $q.notify({ type: 'negative', message: 'Ne mogu pristupiti kameri.' })
+    },
+    options,
+  )
+}
+
+function onFilePicked(mode) {
+  const file = mode === 'add' ? addPhotoFile.value : editPhotoFile.value
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '')
+    const match = dataUrl.match(/^data:(.+);base64,(.*)$/)
+    if (!match) return
+    const mime = match[1]
+    const base64 = match[2]
+    if (mode === 'add') {
+      addForm.value.photo_base64 = base64
+      addForm.value.photo_mime = mime
+      addForm.value.photo_preview = dataUrl
+    } else {
+      editForm.value.photo_base64 = base64
+      editForm.value.photo_mime = mime
+      editForm.value.photo_preview = dataUrl
+    }
+  }
+  reader.readAsDataURL(file)
 }
 
 async function addPet() {
@@ -168,6 +301,8 @@ async function addPet() {
       species: addForm.value.species,
       breed: addForm.value.breed || null,
       notes: addForm.value.notes || null,
+      photo_base64: addForm.value.photo_base64,
+      photo_mime: addForm.value.photo_mime,
     })
     addDialog.value = false
     await loadPets()
@@ -187,15 +322,27 @@ async function addPet() {
 const editDialog = ref(false)
 const editLoading = ref(false)
 const editPetId = ref(null)
-const editForm = ref({ name: '', species: '', breed: '', notes: '' })
+const editForm = ref({
+  name: '',
+  species: '',
+  breed: '',
+  notes: '',
+  photo_base64: null,
+  photo_mime: null,
+  photo_preview: null,
+})
 
 function openEditDialog(p) {
   editPetId.value = p.id_pet
+  editPhotoFile.value = null
   editForm.value = {
     name: p.name,
     species: p.species,
     breed: p.breed || '',
     notes: p.notes || '',
+    photo_base64: p.photo || null,
+    photo_mime: p.photo_mime || null,
+    photo_preview: p.photo && p.photo_mime ? `data:${p.photo_mime};base64,${p.photo}` : null,
   }
   editDialog.value = true
 }
@@ -214,6 +361,8 @@ async function savePetEdit() {
       species: editForm.value.species,
       breed: editForm.value.breed || null,
       notes: editForm.value.notes || null,
+      photo_base64: editForm.value.photo_base64,
+      photo_mime: editForm.value.photo_mime,
     })
     editDialog.value = false
     await loadPets()

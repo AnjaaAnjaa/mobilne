@@ -7,9 +7,15 @@
 
     <q-card class="q-mb-lg">
       <q-card-section class="row items-center justify-between">
-        <div>
-          <div class="text-h6">{{ pet.name }}</div>
-          <div class="text-subtitle2 text-grey-7">Vrsta: {{ pet.species }}</div>
+        <div class="row items-center q-gutter-md">
+          <q-avatar v-if="petPhotoSrc" size="72px" rounded>
+            <q-img :src="petPhotoSrc" fit="cover" />
+          </q-avatar>
+
+          <div>
+            <div class="text-h6">{{ pet.name }}</div>
+            <div class="text-subtitle2 text-grey-7">Vrsta: {{ pet.species }}</div>
+          </div>
         </div>
 
         <q-chip v-if="nextVisitLabel" color="yellow-7" text-color="black">
@@ -64,6 +70,18 @@
           <q-input v-model="addForm.visit_date" label="Datum pregleda (YYYY-MM-DD) *" filled />
           <q-select v-model="addForm.type" :options="visitTypes" label="Tip pregleda *" filled />
           <q-input v-model="addForm.clinic" label="Veterinar / klinika" filled />
+          <q-input v-model="addForm.clinic_address" label="Adresa veterinara" filled>
+            <template v-slot:append>
+              <q-btn
+                flat
+                round
+                dense
+                icon="map"
+                :disable="!addForm.clinic_address"
+                @click="openMaps(addForm.clinic_address)"
+              />
+            </template>
+          </q-input>
           <q-input v-model.number="addForm.weight" label="Težina (kg)" type="number" filled />
           <q-input v-model="addForm.diagnosis" label="Dijagnoza" filled />
           <q-input v-model="addForm.treatment" label="Terapija" filled />
@@ -92,6 +110,18 @@
           <q-input v-model="editForm.visit_date" label="Datum pregleda (YYYY-MM-DD) *" filled />
           <q-select v-model="editForm.type" :options="visitTypes" label="Tip pregleda *" filled />
           <q-input v-model="editForm.clinic" label="Veterinar / klinika" filled />
+          <q-input v-model="editForm.clinic_address" label="Adresa veterinara" filled>
+            <template v-slot:append>
+              <q-btn
+                flat
+                round
+                dense
+                icon="map"
+                :disable="!editForm.clinic_address"
+                @click="openMaps(editForm.clinic_address)"
+              />
+            </template>
+          </q-input>
           <q-input v-model.number="editForm.weight" label="Težina (kg)" type="number" filled />
           <q-input v-model="editForm.diagnosis" label="Dijagnoza" filled />
           <q-input v-model="editForm.treatment" label="Terapija" filled />
@@ -133,6 +163,10 @@ const editLoading = ref(false)
 const deleteLoadingId = ref(null)
 
 const pet = ref({ id_pet: petId, name: 'Učitavam...', species: '-' })
+const petPhotoSrc = computed(() => {
+  if (!pet.value?.photo || !pet.value?.photo_mime) return ''
+  return `data:${pet.value.photo_mime};base64,${pet.value.photo}`
+})
 const visits = ref([])
 
 const visitTypes = ['Cijepljenje', 'Kontrola', 'Operacija', 'Tretman', 'Pregled zuba', 'Ostalo']
@@ -141,6 +175,7 @@ const columns = [
   { name: 'visit_date', label: 'Datum pregleda', field: 'visit_date', align: 'left' },
   { name: 'type', label: 'Tip', field: 'type', align: 'left' },
   { name: 'clinic', label: 'Klinika', field: 'clinic', align: 'left' },
+  { name: 'clinic_address', label: 'Adresa', field: 'clinic_address', align: 'left' },
   { name: 'weight', label: 'Težina (kg)', field: 'weight', align: 'right' },
   { name: 'next_visit_date', label: 'Sljedeći pregled', field: 'next_visit_date', align: 'center' },
   { name: 'actions', label: 'Akcije', field: 'actions', align: 'center' },
@@ -204,6 +239,7 @@ const addForm = ref({
   visit_date: '',
   type: '',
   clinic: '',
+  clinic_address: '',
   weight: null,
   diagnosis: '',
   treatment: '',
@@ -215,12 +251,44 @@ function openAddDialog() {
     visit_date: '',
     type: '',
     clinic: '',
+    clinic_address: '',
     weight: null,
     diagnosis: '',
     treatment: '',
     next_visit_date: '',
   }
   addDialog.value = true
+}
+
+function openMaps(address) {
+  if (!address) return
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+  window.open(url, '_system')
+}
+
+function hasCalendarPlugin() {
+  return typeof window !== 'undefined' && !!window?.plugins?.calendar
+}
+
+function addNextVisitToCalendar(nextDateStr, clinic, address) {
+  if (!nextDateStr) return
+  if (!hasCalendarPlugin()) return
+
+  const start = new Date(`${nextDateStr}T09:00:00`)
+  const end = new Date(`${nextDateStr}T10:00:00`)
+  const location = [clinic, address].filter(Boolean).join(', ')
+  const title = `PetCare: pregled za ${pet.value?.name || 'ljubimca'}`
+  const notes = 'Dodano iz PetCare aplikacije.'
+
+  window.plugins.calendar.createEvent(
+    title,
+    location || '',
+    notes,
+    start,
+    end,
+    () => {},
+    (err) => console.error('Calendar error:', err),
+  )
 }
 
 async function saveVisit() {
@@ -247,11 +315,21 @@ async function saveVisit() {
       id_pet: petId,
       ...addForm.value,
       clinic: addForm.value.clinic || null,
+      clinic_address: addForm.value.clinic_address || null,
       weight: addForm.value.weight ?? null,
       diagnosis: addForm.value.diagnosis || null,
       treatment: addForm.value.treatment || null,
       next_visit_date: addForm.value.next_visit_date || null,
     })
+
+    if (addForm.value.next_visit_date) {
+      addNextVisitToCalendar(
+        addForm.value.next_visit_date,
+        addForm.value.clinic,
+        addForm.value.clinic_address,
+      )
+    }
+
     addDialog.value = false
     await loadVisits()
     $q.notify({ type: 'positive', message: 'Pregled dodan.' })
@@ -273,6 +351,7 @@ const editForm = ref({
   visit_date: '',
   type: '',
   clinic: '',
+  clinic_address: '',
   weight: null,
   diagnosis: '',
   treatment: '',
@@ -285,6 +364,7 @@ function openEditDialog(row) {
     visit_date: row.visit_date,
     type: row.type,
     clinic: row.clinic || '',
+    clinic_address: row.clinic_address || '',
     weight: row.weight ?? null,
     diagnosis: row.diagnosis || '',
     treatment: row.treatment || '',
@@ -322,11 +402,20 @@ async function updateVisit() {
       visit_date: editForm.value.visit_date,
       type: editForm.value.type,
       clinic: editForm.value.clinic || null,
+      clinic_address: editForm.value.clinic_address || null,
       weight: editForm.value.weight ?? null,
       diagnosis: editForm.value.diagnosis || null,
       treatment: editForm.value.treatment || null,
       next_visit_date: editForm.value.next_visit_date || null,
     })
+
+    if (editForm.value.next_visit_date) {
+      addNextVisitToCalendar(
+        editForm.value.next_visit_date,
+        editForm.value.clinic,
+        editForm.value.clinic_address,
+      )
+    }
 
     editDialog.value = false
     await loadVisits()
